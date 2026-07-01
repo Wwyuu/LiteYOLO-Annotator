@@ -1,6 +1,6 @@
-# 路径均相对于 WheatWeed 项目根目录（label_editor 的上一级）
-images: submission_rfdetr/images
-labels: runs/detect/label_conf015
+# 路径均相对于label_editor 的上一级
+images: 输入您的图片文件夹
+labels: 输入您的label文档文件夹
 
 # 编辑记录文件（相对于 label_editor 目录）
 edit_log: edited_labels.json
