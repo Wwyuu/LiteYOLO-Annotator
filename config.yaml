@@ -1,0 +1,12 @@
+# 路径均相对于 WheatWeed 项目根目录（label_editor 的上一级）
+images: submission_rfdetr/images
+labels: runs/detect/label_conf015
+
+# 编辑记录文件（相对于 label_editor 目录）
+edit_log: edited_labels.json
+
+classes:
+  - weed
+
+host: 127.0.0.1
+port: 8765

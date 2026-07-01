@@ -1,0 +1,5 @@
+﻿__pycache__/
+*.py[cod]
+edited_labels.json
+edited_labels.txt
+*.txt.bak
