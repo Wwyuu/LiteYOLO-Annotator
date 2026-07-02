@@ -71,6 +71,7 @@ def create_app(
     @app.get("/api/config")
     def api_config():
         edit_log: EditLog = app.config["EDIT_LOG"]
+        stats = edit_log.get_stats()
         return jsonify(
             {
                 "images_dir": str(app.config["IMAGES_DIR"]),
@@ -78,7 +79,9 @@ def create_app(
                 "class_names": app.config["CLASS_NAMES"],
                 "edit_log_json": str(edit_log.json_path),
                 "edit_log_txt": str(edit_log.txt_path),
-                "edited_count": len(edit_log.get_items()),
+                "edited_count": stats["edited_count"],
+                "total_added": stats["total_added"],
+                "total_deleted": stats["total_deleted"],
             }
         )
 
@@ -98,10 +101,14 @@ def create_app(
                 item["edited"] = True
                 item["edited_at"] = edit_info.get("edited_at")
                 item["edit_count"] = edit_info.get("edit_count", 0)
+                item["boxes_added"] = edit_info.get("boxes_added", 0)
+                item["boxes_deleted"] = edit_info.get("boxes_deleted", 0)
             else:
                 item["edited"] = False
                 item["edited_at"] = None
                 item["edit_count"] = 0
+                item["boxes_added"] = 0
+                item["boxes_deleted"] = 0
         return jsonify({"items": pairs, "total": len(pairs)})
 
     @app.get("/api/image/<stem>")
@@ -161,8 +168,12 @@ def create_app(
         try:
             save_labels_atomic(label_path, boxes)
             edit_log: EditLog = app.config["EDIT_LOG"]
-            edit_info = edit_log.record(stem, len(boxes))
-        except OSError as exc:
+            stats_payload = payload.get("stats") if isinstance(payload.get("stats"), dict) else {}
+            added = int(stats_payload.get("added", 0) or 0)
+            deleted = int(stats_payload.get("deleted", 0) or 0)
+            edit_info = edit_log.record(stem, len(boxes), added=added, deleted=deleted)
+            global_stats = edit_log.get_stats()
+        except (OSError, ValueError) as exc:
             return jsonify({"error": f"save failed: {exc}"}), 500
 
         return jsonify(
@@ -173,6 +184,12 @@ def create_app(
                 "path": str(label_path),
                 "edited_at": edit_info["edited_at"],
                 "edit_count": edit_info["edit_count"],
+                "boxes_added": edit_info.get("boxes_added", 0),
+                "boxes_deleted": edit_info.get("boxes_deleted", 0),
+                "session_added": added,
+                "session_deleted": deleted,
+                "total_added": global_stats["total_added"],
+                "total_deleted": global_stats["total_deleted"],
                 "edit_log_json": str(edit_log.json_path),
                 "edit_log_txt": str(edit_log.txt_path),
             }
@@ -244,6 +261,8 @@ def main() -> None:
     print(f"编辑记录: {edit_log.json_path}")
     print(f"编辑清单: {edit_log.txt_path}")
     print(f"已编辑: {len(edit_log.get_items())} 个文件")
+    stats = edit_log.get_stats()
+    print(f"累计新增框: {stats['total_added']} | 累计删除框: {stats['total_deleted']}")
     print(f"图片数: {sum(1 for item in pairs if item['has_image'])}")
     print(f"标注数: {sum(1 for item in pairs if item['has_label'])}")
     print(f"已配对: {matched}")

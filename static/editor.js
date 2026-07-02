@@ -22,6 +22,10 @@
     drag: null,
     spacePressed: false,
     editedCount: 0,
+    totalAdded: 0,
+    totalDeleted: 0,
+    sessionAdded: 0,
+    sessionDeleted: 0,
   };
 
   const els = {
@@ -63,12 +67,23 @@
 
   function markDirty() {
     state.dirty = true;
-    setStatus("未保存", "unsaved");
+    refreshStatus("unsaved");
+    renderEditSummary();
   }
 
   function markClean(msg = "已保存") {
     state.dirty = false;
     setStatus(msg, "ok");
+  }
+
+  function refreshStatus(kind = "") {
+    if (!state.stem) return;
+    const item = state.items.find((x) => x.stem === state.stem);
+    let text = formatStatus(state.stem, state.boxes.length, item);
+    if (state.sessionAdded || state.sessionDeleted) {
+      text += ` | 本次 +${state.sessionAdded} -${state.sessionDeleted}`;
+    }
+    setStatus(text, kind || (state.dirty ? "unsaved" : ""));
   }
 
   function boxToPixels(box) {
@@ -315,7 +330,14 @@
 
   function renderEditSummary() {
     if (!els.editSummary) return;
-    els.editSummary.textContent = `已手动编辑: ${state.editedCount} 个`;
+    const lines = [
+      `已手动编辑: ${state.editedCount} 个`,
+      `累计新增: ${state.totalAdded} 框 | 累计删除: ${state.totalDeleted} 框`,
+    ];
+    if (state.dirty && (state.sessionAdded || state.sessionDeleted)) {
+      lines.push(`当前图片未保存: +${state.sessionAdded} -${state.sessionDeleted}`);
+    }
+    els.editSummary.textContent = lines.join("\n");
   }
 
   function renderImageList() {
@@ -337,7 +359,7 @@
       if (item.stem === state.stem) btn.classList.add("active");
       if (item.edited) btn.classList.add("edited-item");
       const editedLine = item.edited
-        ? `<span class="edited">已编辑 ${item.edited_at} · 第${item.edit_count}次</span>`
+        ? `<span class="edited">已编辑 ${item.edited_at} · 第${item.edit_count}次 · +${item.boxes_added || 0} -${item.boxes_deleted || 0}</span>`
         : "";
       btn.innerHTML = `<span class="name">${item.stem}</span><span class="count">${item.box_count} 框</span>${editedLine}`;
       btn.addEventListener("click", () => gotoIndex(index));
@@ -351,6 +373,8 @@
     const data = await res.json();
     state.classNames = data.class_names || ["weed"];
     state.editedCount = data.edited_count || 0;
+    state.totalAdded = data.total_added || 0;
+    state.totalDeleted = data.total_deleted || 0;
     els.dirs.textContent = [
       `图片: ${data.images_dir}`,
       `标注: ${data.labels_dir}`,
@@ -385,9 +409,11 @@
     };
     state.boxes = (labelData.boxes || []).map(clampBox);
     state.selectedIndex = state.boxes.length ? 0 : -1;
+    state.sessionAdded = 0;
+    state.sessionDeleted = 0;
     state.dirty = false;
     const item = state.items.find((x) => x.stem === stem);
-    setStatus(formatStatus(stem, state.boxes.length, item));
+    refreshStatus();
     scheduleRender();
     renderImageList();
     updateNavButtons();
@@ -398,24 +424,26 @@
     els.btnNext.disabled = state.currentIndex >= state.filteredItems.length - 1;
   }
 
-  async function gotoIndex(index) {
-    if (index < 0 || index >= state.filteredItems.length) return;
-    if (state.dirty) {
+  async function gotoIndex(index, { skipDirtyCheck = false } = {}) {
+    if (index < 0 || index >= state.filteredItems.length) return false;
+    if (!skipDirtyCheck && state.dirty) {
       const ok = window.confirm("当前图片有未保存修改，是否放弃？");
-      if (!ok) return;
+      if (!ok) return false;
     }
     state.currentIndex = index;
     const stem = state.filteredItems[index].stem;
     try {
       await loadCurrentStem(stem);
+      return true;
     } catch (err) {
       setStatus(err.message || "加载失败", "error");
       toast("加载失败");
+      return false;
     }
   }
 
   async function saveCurrent() {
-    if (!state.stem || state.saving) return;
+    if (!state.stem || state.saving) return false;
     state.saving = true;
     els.btnSave.disabled = true;
     setStatus("保存中...", "unsaved");
@@ -423,12 +451,16 @@
       const res = await fetch(`/api/labels/${encodeURIComponent(state.stem)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ boxes: state.boxes.map(clampBox) }),
+        body: JSON.stringify({
+          boxes: state.boxes.map(clampBox),
+          stats: {
+            added: state.sessionAdded,
+            deleted: state.sessionDeleted,
+          },
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "保存失败");
-      markClean(`已保存 (${data.box_count} 框) · ${data.edited_at}`);
-      toast(`保存成功，第 ${data.edit_count} 次编辑`);
 
       const item = state.items.find((x) => x.stem === state.stem);
       if (item) {
@@ -437,17 +469,47 @@
         item.edited = true;
         item.edited_at = data.edited_at;
         item.edit_count = data.edit_count;
+        item.boxes_added = data.boxes_added;
+        item.boxes_deleted = data.boxes_deleted;
       }
       state.editedCount = state.items.filter((x) => x.edited).length;
-      setStatus(formatStatus(state.stem, data.box_count, item));
+      state.totalAdded = data.total_added || 0;
+      state.totalDeleted = data.total_deleted || 0;
+      state.sessionAdded = 0;
+      state.sessionDeleted = 0;
+      state.dirty = false;
+      setStatus(
+        `已保存 (${data.box_count} 框) · 本次 +${data.session_added} -${data.session_deleted} · ${data.edited_at}`,
+        "ok"
+      );
+      toast(`保存成功，本次 +${data.session_added} -${data.session_deleted}`);
       renderImageList();
+      return true;
     } catch (err) {
       setStatus(err.message || "保存失败", "error");
       toast("保存失败，请重试");
+      return false;
     } finally {
       state.saving = false;
       els.btnSave.disabled = false;
     }
+  }
+
+  async function saveAndNext() {
+    if (!state.stem || state.saving) return;
+    const nextIndex = state.currentIndex + 1;
+
+    if (state.dirty) {
+      const saved = await saveCurrent();
+      if (!saved) return;
+    }
+
+    if (nextIndex < state.filteredItems.length) {
+      await gotoIndex(nextIndex, { skipDirtyCheck: true });
+      return;
+    }
+
+    toast("已是最后一张");
   }
 
   function setMode(mode) {
@@ -461,6 +523,7 @@
     if (state.selectedIndex < 0) return;
     state.boxes.splice(state.selectedIndex, 1);
     state.selectedIndex = Math.min(state.selectedIndex, state.boxes.length - 1);
+    state.sessionDeleted += 1;
     markDirty();
     draw();
   }
@@ -478,6 +541,30 @@
     }
 
     if (state.mode === "draw" && evt.button === 0) {
+      const handle = hitTestHandle(imgPt.x, imgPt.y);
+      if (handle) {
+        state.drag = {
+          type: "resize",
+          handle,
+          index: state.selectedIndex,
+          startBox: { ...state.boxes[state.selectedIndex] },
+        };
+        return;
+      }
+
+      const hit = hitTestBox(imgPt.x, imgPt.y);
+      if (hit >= 0) {
+        state.selectedIndex = hit;
+        state.drag = {
+          type: "move",
+          index: hit,
+          start: imgPt,
+          startBox: { ...state.boxes[hit] },
+        };
+        draw();
+        return;
+      }
+
       state.drag = { type: "draw", start: imgPt, current: imgPt };
       return;
     }
@@ -511,9 +598,22 @@
   }
 
   function onPointerMove(evt) {
-    if (!state.drag) return;
     const point = getCanvasPoint(evt);
+    const imgPt = screenToImage(point.x, point.y);
 
+    if (!state.drag) {
+      if (state.mode === "select" || state.mode === "draw") {
+        const handle = hitTestHandle(imgPt.x, imgPt.y);
+        if (handle) {
+          const cursor = { nw: "nwse-resize", n: "ns-resize", ne: "nesw-resize", e: "ew-resize" }[handle] || "nwse-resize";
+          els.canvasWrap.style.cursor = cursor;
+          return;
+        }
+        const hit = hitTestBox(imgPt.x, imgPt.y);
+        els.canvasWrap.style.cursor = hit >= 0 ? "move" : state.mode === "draw" ? "crosshair" : "default";
+      }
+      return;
+    }
     if (state.drag.type === "pan") {
       state.offsetX = state.drag.originX + (point.x - state.drag.start.x);
       state.offsetY = state.drag.originY + (point.y - state.drag.start.y);
@@ -521,8 +621,6 @@
       draw();
       return;
     }
-
-    const imgPt = screenToImage(point.x, point.y);
 
     if (state.drag.type === "draw") {
       state.drag.current = imgPt;
@@ -571,6 +669,8 @@
         const box = clampBox(pixelsToBox(start.x, start.y, current.x, current.y, classId));
         state.boxes.push(box);
         state.selectedIndex = state.boxes.length - 1;
+        state.sessionAdded += 1;
+        setMode("select");
         markDirty();
       }
     }
@@ -615,7 +715,7 @@
     els.btnModeSelect.addEventListener("click", () => setMode("select"));
     els.btnModeDraw.addEventListener("click", () => setMode("draw"));
     els.btnDelete.addEventListener("click", deleteSelected);
-    els.btnSave.addEventListener("click", saveCurrent);
+    els.btnSave.addEventListener("click", saveAndNext);
     els.btnFit.addEventListener("click", fitToView);
     els.btnZoomIn.addEventListener("click", () => {
       state.scale = Math.min(8, state.scale * 1.15);
@@ -653,11 +753,14 @@
         evt.preventDefault();
         saveCurrent();
       }
+      if (evt.key.toLowerCase() === "v" && !state.drag) {
+        evt.preventDefault();
+        saveAndNext();
+      }
       if (evt.key === "Delete" || evt.key === "Backspace") {
         evt.preventDefault();
         deleteSelected();
       }
-      if (evt.key.toLowerCase() === "v") setMode("select");
       if (evt.key.toLowerCase() === "r") setMode("draw");
       if (evt.key.toLowerCase() === "f") fitToView();
       if (evt.key === "ArrowLeft") gotoIndex(state.currentIndex - 1);

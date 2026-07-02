@@ -40,13 +40,32 @@ class EditLog:
         item = self.get_items().get(stem)
         return item if isinstance(item, dict) else None
 
-    def record(self, stem: str, box_count: int) -> dict[str, Any]:
+    def get_stats(self) -> dict[str, int]:
+        items = self.get_items()
+        total_added = sum(int(info.get("boxes_added", 0)) for info in items.values())
+        total_deleted = sum(int(info.get("boxes_deleted", 0)) for info in items.values())
+        return {
+            "edited_count": len(items),
+            "total_added": total_added,
+            "total_deleted": total_deleted,
+        }
+
+    def record(
+        self,
+        stem: str,
+        box_count: int,
+        *,
+        added: int = 0,
+        deleted: int = 0,
+    ) -> dict[str, Any]:
         items = self._data.setdefault("items", {})
         prev = items.get(stem) if isinstance(items.get(stem), dict) else {}
         record = {
             "edited_at": _now_str(),
             "edit_count": int(prev.get("edit_count", 0)) + 1,
             "box_count": box_count,
+            "boxes_added": int(prev.get("boxes_added", 0)) + max(0, int(added)),
+            "boxes_deleted": int(prev.get("boxes_deleted", 0)) + max(0, int(deleted)),
         }
         items[stem] = record
         self._save()
@@ -64,7 +83,7 @@ class EditLog:
             "# 手动编辑过的标注记录",
             "# 仅在标注工具中点击「保存」后写入",
             f"# 共 {len(items)} 个文件",
-            "# 格式: 编辑时间 | 文件名 | 框数 | 累计保存次数",
+            "# 格式: 编辑时间 | 文件名 | 框数 | 累计保存次数 | 累计新增 | 累计删除",
             "",
         ]
         sorted_items = sorted(
@@ -76,7 +95,11 @@ class EditLog:
             edited_at = info.get("edited_at", "")
             box_count = info.get("box_count", 0)
             edit_count = info.get("edit_count", 0)
-            lines.append(f"{edited_at} | {stem} | {box_count}框 | 第{edit_count}次保存")
+            boxes_added = info.get("boxes_added", 0)
+            boxes_deleted = info.get("boxes_deleted", 0)
+            lines.append(
+                f"{edited_at} | {stem} | {box_count}框 | 第{edit_count}次保存 | +{boxes_added} -{boxes_deleted}"
+            )
         self._atomic_write(self.txt_path, "\n".join(lines) + "\n")
 
     @staticmethod

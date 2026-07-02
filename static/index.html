@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>YOLO标注工具</title>
-  <link rel="stylesheet" href="/static/editor.css?v=6" />
+  <link rel="stylesheet" href="/static/editor.css?v=7" />
 </head>
 <body>
   <div id="app">
@@ -28,11 +28,11 @@
       <div id="toolbar">
         <button id="btn-prev" title="上一张 (←)">← 上一张</button>
         <button id="btn-next" title="下一张 (→)">下一张 →</button>
-        <button id="btn-mode-select" class="active" title="选择/移动/缩放框 (V)">选择</button>
+        <button id="btn-mode-select" class="active" title="选择/移动/缩放框">选择</button>
         <button id="btn-mode-draw" title="框选新标注 (R)">框选</button>
         <select id="class-select" title="当前类别"></select>
         <button id="btn-delete" title="删除选中框 (Delete)">删除框</button>
-        <button id="btn-save" title="保存 (Ctrl+S)">保存</button>
+        <button id="btn-save" title="保存并下一张 (V)">保存</button>
         <button id="btn-fit" title="适应窗口 (F)">适应</button>
         <button id="btn-zoom-in" title="放大 (+)">+</button>
         <button id="btn-zoom-out" title="缩小 (-)">-</button>
@@ -43,13 +43,13 @@
         <img id="bg-image" alt="" draggable="false" />
         <canvas id="editor-canvas"></canvas>
         <div id="hint">
-          快捷键：V 选择 | R 框选 | Del 删除 | Ctrl+S 保存 | ←/→ 切换 | 滚轮缩放 | 空格+拖拽平移
+          快捷键：V 保存并下一张 | R 框选 | Del 删除 | Ctrl+S 仅保存 | ←/→ 切换 | 滚轮缩放 | 空格+拖拽平移
         </div>
       </div>
     </main>
   </div>
 
   <div id="toast"></div>
-  <script src="/static/editor.js?v=5"></script>
+  <script src="/static/editor.js?v=8"></script>
 </body>
 </html>

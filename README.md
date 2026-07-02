@@ -92,10 +92,10 @@ python server.py --images path/to/images --labels path/to/labels --classes wheat
 
 | 按键 | 功能 |
 |------|------|
-| `V` | 选择模式（移动 / 缩放框） |
+| `V` | 保存并跳到下一张（无修改时直接下一张） |
 | `R` | 框选模式（新建标注） |
+| `Ctrl + S` | 仅保存当前图片 |
 | `Delete` | 删除当前选中框 |
-| `Ctrl + S` | 保存 |
 | `←` / `→` | 上一张 / 下一张 |
 | `F` | 适应窗口 |
 | 滚轮 | 缩放 |
@@ -108,7 +108,7 @@ python server.py --images path/to/images --labels path/to/labels --classes wheat
 - `label_editor/edited_labels.json`：结构化数据，供程序读取
 - `label_editor/edited_labels.txt`：可读清单，按时间倒序排列
 
-界面左侧可筛选「已编辑」图片，并显示最近编辑时间与累计保存次数。
+界面左侧会显示**累计新增框数**和**累计删除框数**；当前图片未保存时，还会显示本次操作的 `+新增 / -删除` 统计。每张已编辑图片的列表项中也会显示该图的累计 `+新增 -删除`。
 
 ## 目录结构
 
